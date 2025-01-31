@@ -4,6 +4,7 @@
 (define-constant contract-owner tx-sender)
 (define-constant err-not-found (err u404))
 (define-constant err-unauthorized (err u401))
+(define-constant err-invalid-input (err u400))
 
 ;; Data structures
 (define-map playlists
@@ -36,11 +37,19 @@
 (define-data-var playlist-counter uint u0)
 (define-data-var comment-counter uint u0)
 
+;; Private functions
+(define-private (validate-playlist-name (name (string-utf8 64)))
+  (let ((length (len name)))
+    (and (> length u0) (<= length u64))
+  )
+)
+
 ;; Public functions
 (define-public (create-playlist (name (string-utf8 64)) (description (string-utf8 256)))
   (let (
     (playlist-id (+ (var-get playlist-counter) u1))
   )
+    (asserts! (validate-playlist-name name) err-invalid-input)
     (map-set playlists
       { id: playlist-id }
       {
@@ -62,6 +71,7 @@
     (playlist (unwrap! (get-playlist playlist-id) err-not-found))
   )
     (asserts! (is-eq (get owner playlist) tx-sender) err-unauthorized)
+    (asserts! (> (len song-url) u0) err-invalid-input)
     (ok (map-set playlists
       { id: playlist-id }
       (merge playlist { songs: (unwrap-panic (as-max-len? (append (get songs playlist) song-url) u50)) })
