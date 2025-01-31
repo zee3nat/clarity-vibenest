@@ -8,6 +8,10 @@ requirements = []
 path = "contracts/vibenest.clar"
 depends_on = []
 
+[contracts.vibenest-token]
+path = "contracts/vibenest-token.clar"
+depends_on = []
+
 [repl]
 costs_version = 2
 parser_version = 2
