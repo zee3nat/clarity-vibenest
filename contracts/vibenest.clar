@@ -5,6 +5,8 @@
 (define-constant err-not-found (err u404))
 (define-constant err-unauthorized (err u401))
 (define-constant err-invalid-input (err u400))
+(define-constant err-transfer-failed (err u402))
+(define-constant err-already-processed (err u403))
 
 ;; Data structures
 (define-map playlists
@@ -15,7 +17,8 @@
     description: (string-utf8 256),
     songs: (list 50 (string-utf8 128)),
     likes: uint,
-    created-at: uint
+    created-at: uint,
+    version: uint
   }
 )
 
@@ -36,6 +39,7 @@
 ;; Data vars
 (define-data-var playlist-counter uint u0)
 (define-data-var comment-counter uint u0)
+(define-data-var contract-paused bool false)
 
 ;; Private functions
 (define-private (validate-playlist-name (name (string-utf8 64)))
@@ -44,11 +48,16 @@
   )
 )
 
+(define-private (is-contract-owner)
+  (is-eq tx-sender contract-owner)
+)
+
 ;; Public functions
 (define-public (create-playlist (name (string-utf8 64)) (description (string-utf8 256)))
   (let (
     (playlist-id (+ (var-get playlist-counter) u1))
   )
+    (asserts! (not (var-get contract-paused)) err-unauthorized)
     (asserts! (validate-playlist-name name) err-invalid-input)
     (map-set playlists
       { id: playlist-id }
@@ -58,7 +67,8 @@
         description: description,
         songs: (list),
         likes: u0,
-        created-at: block-height
+        created-at: block-height,
+        version: u1
       }
     )
     (var-set playlist-counter playlist-id)
@@ -66,27 +76,27 @@
   )
 )
 
-(define-public (add-song (playlist-id uint) (song-url (string-utf8 128)))
+(define-public (transfer-playlist-ownership (playlist-id uint) (new-owner principal))
   (let (
     (playlist (unwrap! (get-playlist playlist-id) err-not-found))
   )
+    (asserts! (not (var-get contract-paused)) err-unauthorized)
     (asserts! (is-eq (get owner playlist) tx-sender) err-unauthorized)
-    (asserts! (> (len song-url) u0) err-invalid-input)
     (ok (map-set playlists
       { id: playlist-id }
-      (merge playlist { songs: (unwrap-panic (as-max-len? (append (get songs playlist) song-url) u50)) })
+      (merge playlist { 
+        owner: new-owner,
+        version: (+ (get version playlist) u1)
+      })
     ))
   )
 )
 
-(define-public (like-playlist (playlist-id uint))
-  (let (
-    (playlist (unwrap! (get-playlist playlist-id) err-not-found))
-  )
-    (ok (map-set playlists
-      { id: playlist-id }
-      (merge playlist { likes: (+ (get likes playlist) u1) })
-    ))
+;; Admin functions
+(define-public (set-contract-pause (paused bool))
+  (begin
+    (asserts! (is-contract-owner) err-unauthorized)
+    (ok (var-set contract-paused paused))
   )
 )
 
